@@ -171,3 +171,31 @@ export function rgbToHex(rgb: { r: number; g: number; b: number }): string {
   
   return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
 }
+
+/**
+ * 预计算色卡中每种颜色的 LAB 值，便于高效进行 Delta E 匹配
+ */
+export function precomputePaletteLab(
+  palette: BeadColor[]
+): { color: BeadColor; lab: { l: number; a: number; b: number } }[] {
+  return palette.map((c) => ({ color: c, lab: rgbToLab(c.rgb) }))
+}
+
+/**
+ * 使用预计算的 LAB 列表匹配最接近的颜色
+ */
+export function findClosestBeadColorFromLab(
+  targetLab: { l: number; a: number; b: number },
+  paletteLabs: { color: BeadColor; lab: { l: number; a: number; b: number } }[]
+): BeadColor {
+  let closest = paletteLabs[0].color
+  let minDistance = Infinity
+  for (let i = 0; i < paletteLabs.length; i++) {
+    const d = calculateDeltaE(targetLab, paletteLabs[i].lab)
+    if (d < minDistance) {
+      minDistance = d
+      closest = paletteLabs[i].color
+    }
+  }
+  return closest
+}

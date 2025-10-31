@@ -251,49 +251,35 @@ export async function createPreviewImage(
 ): Promise<Buffer> {
   const canvasWidth = width * pixelSize;
   const canvasHeight = height * pixelSize;
-
-  // 创建白色背景
-  const canvas = sharp({
-    create: {
-      width: canvasWidth,
-      height: canvasHeight,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
-    },
-  });
-
-  // 为每个像素创建一个小方块
-  const overlays = [];
+  // 直接构建整张画布的原始 RGB 缓冲区，避免逐像素创建 sharp 实例
+  const channels = 3;
+  const buffer = Buffer.alloc(canvasWidth * canvasHeight * channels, 255); // 白色背景
 
   for (const pixel of pixels) {
-    const x = pixel.x * pixelSize;
-    const y = pixel.y * pixelSize;
+    const startX = pixel.x * pixelSize;
+    const startY = pixel.y * pixelSize;
+    const r = pixel.color.r;
+    const g = pixel.color.g;
+    const b = pixel.color.b;
 
-    // 创建单个像素的小方块
-    try {
-      const pixelBlockBuffer = await sharp({
-        create: {
-          width: pixelSize,
-          height: pixelSize,
-          channels: 3,
-          background: pixel.color,
-        },
-      })
-        .png()
-        .toBuffer();
-
-      overlays.push({
-        input: pixelBlockBuffer,
-        left: x,
-        top: y,
-      });
-    } catch (error) {
-      console.warn(`创建像素块失败 (${pixel.x}, ${pixel.y}):`, error);
+    for (let py = 0; py < pixelSize; py++) {
+      const rowY = startY + py;
+      const rowStart = (rowY * canvasWidth + startX) * channels;
+      for (let px = 0; px < pixelSize; px++) {
+        const idx = rowStart + px * channels;
+        buffer[idx] = r;
+        buffer[idx + 1] = g;
+        buffer[idx + 2] = b;
+      }
     }
   }
 
   try {
-    return await canvas.composite(overlays).png().toBuffer();
+    return await sharp(buffer, {
+      raw: { width: canvasWidth, height: canvasHeight, channels },
+    })
+      .png()
+      .toBuffer();
   } catch (error) {
     throw new Error(
       `创建预览图片失败: ${error instanceof Error ? error.message : "未知错误"}`

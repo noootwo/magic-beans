@@ -15,7 +15,11 @@ import {
   saveImageToFile,
   ProcessedImage,
 } from "../utils/image-processor";
-import { findClosestBeadColor } from "../utils/color-matcher";
+import {
+  findClosestBeadColor,
+  rgbToLab,
+  calculateDeltaE,
+} from "../utils/color-matcher";
 
 /**
  * MagicBeans 主类 - 拼豆像素图转换器
@@ -108,37 +112,57 @@ export class MagicBeans {
 
       // 获取像素数据
       const imageData = getImagePixelData(resizedImage);
-      const pixelColors = getAllPixelColors(imageData);
 
-      // 转换像素颜色
+      // 预计算色卡的 LAB 值，避免在每个像素上重复转换
+      const paletteColors = this.palette.getColors();
+      const paletteLabs = paletteColors.map((c) => ({ color: c, lab: rgbToLab(c.rgb) }));
+
+      // 转换像素颜色（单次遍历原始数据，减少对象创建）
       const pixels: PixelInfo[] = [];
       const colorStats: { [colorName: string]: number } = {};
-      const paletteColors = this.palette.getColors();
 
-      for (const pixel of pixelColors) {
-        // 处理透明度
-        const processedColor = processTransparency(pixel);
+      const width = imageData.width;
+      const height = imageData.height;
+      const data = imageData.data;
 
-        // 找到最匹配的拼豆颜色
-        const beadColor = findClosestBeadColor(processedColor, paletteColors);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const index = (y * width + x) * 4;
+          const r = data[index];
+          const g = data[index + 1];
+          const b = data[index + 2];
+          const a = data[index + 3];
 
-        // 创建像素信息
-        const pixelInfo: PixelInfo = {
-          x: pixel.x,
-          y: pixel.y,
-          beadColor,
-          originalColor: {
-            r: pixel.r,
-            g: pixel.g,
-            b: pixel.b,
-            a: pixel.a,
-          },
-        };
+          // 处理透明度
+          const processedColor = processTransparency({ r, g, b, a });
 
-        pixels.push(pixelInfo);
+          // 目标颜色的 LAB
+          const targetLab = rgbToLab(processedColor);
 
-        // 统计颜色使用次数
-        colorStats[beadColor.name] = (colorStats[beadColor.name] || 0) + 1;
+          // 找到最匹配的拼豆颜色（使用预计算的 LAB 避免重复开销）
+          let beadColor = paletteLabs[0].color;
+          let minDistance = Infinity;
+          for (let i = 0; i < paletteLabs.length; i++) {
+            const d = calculateDeltaE(targetLab, paletteLabs[i].lab);
+            if (d < minDistance) {
+              minDistance = d;
+              beadColor = paletteLabs[i].color;
+            }
+          }
+
+          // 记录像素信息
+          const pixelInfo: PixelInfo = {
+            x,
+            y,
+            beadColor,
+            originalColor: { r, g, b, a },
+          };
+
+          pixels.push(pixelInfo);
+
+          // 统计颜色使用次数
+          colorStats[beadColor.name] = (colorStats[beadColor.name] || 0) + 1;
+        }
       }
 
       return {
