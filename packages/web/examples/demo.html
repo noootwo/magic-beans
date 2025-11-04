@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Magic Beans BeadsChart Demo</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 16px;
+      background: #fff;
+      color: #111;
+    }
+
+    #app {
+      border: 1px solid #ddd;
+      display: inline-block;
+      background: #fff;
+    }
+  </style>
+  <!-- 为浏览器动态导入 core 提供映射 -->
+  <script type="importmap">
+    {
+      "imports": {
+        "@magic-beans/core": "/packages/core/dist/index.js"
+      }
+    }
+  </script>
+</head>
+
+<body>
+  <h1>BeadsChart 演示：图片转换 + 色号显示（mard/coco）</h1>
+  <div style="margin-bottom:8px;">
+    <button id="zoomIn">放大</button>
+    <button id="zoomOut">缩小</button>
+    <button id="zoomReset">重置</button>
+    <label style="margin-left:12px;">
+      <input type="checkbox" id="enablePan" /> 启用平移
+    </label>
+    <label style="margin-left:12px;">
+      <input type="checkbox" id="showCodes" /> 显示色号
+    </label>
+    <label style="margin-left:12px;">
+      <input type="checkbox" id="showSeg" /> 显示分割线
+    </label>
+    <label style="margin-left:12px;">
+      Block W: <input type="number" id="bw" value="4" min="1" style="width:60px;" />
+      Block H: <input type="number" id="bh" value="4" min="1" style="width:60px;" />
+    </label>
+  </div>
+
+  <!-- 图片转换控制面板 -->
+  <div class="panel" style="margin-bottom:12px;">
+    <label>选择图片：<input type="file" id="imgInput" accept="image/*" /></label>
+    <label style="margin-left:12px;">目标宽：<input type="number" id="targetW" value="32" min="1"
+        style="width:60px;" /></label>
+    <label style="margin-left:8px;">高：<input type="number" id="targetH" value="32" min="1"
+        style="width:60px;" /></label>
+    <label style="margin-left:12px;"><input type="checkbox" id="keepAspect" checked /> 保持宽高比</label>
+    <label style="margin-left:12px;">色卡：
+      <select id="paletteSel">
+        <option value="coco" selected>COCO</option>
+        <option value="mard">MARD</option>
+      </select>
+    </label>
+    <button id="convertBtn" style="margin-left:12px;">转换图片</button>
+  </div>
+  <div id="app"></div>
+  <!-- 加载 PixiJS UMD 以提供 globalThis.PIXI，供 PixiRenderer 使用 -->
+  <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+  <script type="module">
+    import { BeadsChart } from '/packages/web/dist/index.js'
+
+    const container = document.getElementById('app')
+    const width = 16
+    const height = 16
+
+    const beads = Array.from({ length: width * height }, (_, i) => {
+      const x = i % width
+      const y = Math.floor(i / width)
+      const c = (x + y) % 2 === 0 ? { r: 220, g: 220, b: 220 } : { r: 180, g: 180, b: 240 }
+      return { id: i, x, y, color: c, name: c.g === 220 ? 'A' : 'B' }
+    })
+
+    const chart = new BeadsChart({
+      container,
+      dimensions: { width, height },
+      beadSize: 20,
+      interaction: { hoverHighlight: true, enableClickSelect: true },
+      zoom: { enabled: true },
+      pan: { enabled: false },
+      showColorCodes: true,
+      codeLabelColor: '#222',
+      codeLabelAutoContrast: true,
+      codeLabelMinSize: 12,
+      codeLabelFont: '14px system-ui',
+    })
+
+    chart.dataSource(beads)
+
+    chart.on('selection-change', ({ selectedIds }) => {
+      console.log('Selection:', selectedIds)
+    })
+
+    // UI 控件
+    document.getElementById('zoomIn').addEventListener('click', () => chart.zoomBy(1.2))
+    document.getElementById('zoomOut').addEventListener('click', () => chart.zoomBy(1 / 1.2))
+    document.getElementById('zoomReset').addEventListener('click', () => chart.setZoom(1))
+    const enablePan = document.getElementById('enablePan')
+    enablePan.addEventListener('change', () => {
+      chart.setPanEnabled(enablePan.checked)
+    })
+    const showCodes = document.getElementById('showCodes')
+    showCodes.addEventListener('change', () => {
+      chart.setShowColorCodes(showCodes.checked)
+    })
+    const showSeg = document.getElementById('showSeg')
+    const bw = document.getElementById('bw')
+    const bh = document.getElementById('bh')
+    function applySeg() {
+      if (showSeg.checked) {
+        chart.setSegmentation({
+          blockWidth: parseInt(bw.value, 10) || 4,
+          blockHeight: parseInt(bh.value, 10) || 4,
+          showLabels: true,
+        })
+      } else {
+        chart.setSegmentation(undefined)
+      }
+    }
+    showSeg.addEventListener('change', applySeg)
+    bw.addEventListener('change', applySeg)
+    bh.addEventListener('change', applySeg)
+
+    // 编辑工具
+    const editPanel = document.createElement('div')
+    editPanel.style.marginTop = '12px'
+    editPanel.innerHTML = `
+        <label><input type="checkbox" id="enableEdit" /> 启用编辑</label>
+        <span style="margin-left:12px;">工具：</span>
+        <label><input type="radio" name="tool" value="paint" checked /> 画笔</label>
+        <label style="margin-left:8px;"><input type="radio" name="tool" value="flood" /> 洪泛填充</label>
+        <label style="margin-left:8px;"><input type="radio" name="tool" value="erase" /> 擦除</label>
+        <span style="margin-left:12px;">画笔色号：</span>
+        <button id="brushA">A</button>
+        <button id="brushB" style="margin-left:6px;">B</button>
+        <button id="fillSel" style="margin-left:12px;">填充选区</button>
+        <button id="eraseSel" style="margin-left:6px;">删除选区</button>
+        <button id="undo" style="margin-left:6px;">撤销</button>
+        <button id="redo" style="margin-left:6px;">重做</button>
+      `
+    document.body.appendChild(editPanel)
+
+    const enableEdit = document.getElementById('enableEdit')
+    enableEdit.addEventListener('change', () => chart.enableEdit(enableEdit.checked))
+    document.querySelectorAll('input[name="tool"]').forEach(el => {
+      el.addEventListener('change', (e) => {
+        const val = e.target.value
+        chart.setEditTool(val)
+      })
+    })
+    const beadA = { name: 'A', rgb: { r: 220, g: 220, b: 220 } }
+    const beadB = { name: 'B', rgb: { r: 180, g: 180, b: 240 } }
+    document.getElementById('brushA').addEventListener('click', () => chart.setBrushBeadColor(beadA))
+    document.getElementById('brushB').addEventListener('click', () => chart.setBrushBeadColor(beadB))
+    document.getElementById('fillSel').addEventListener('click', () => chart.fillSelectionWithBeadColor(beadB))
+    document.getElementById('eraseSel').addEventListener('click', () => chart.eraseSelection())
+    document.getElementById('undo').addEventListener('click', () => chart.undo())
+    document.getElementById('redo').addEventListener('click', () => chart.redo())
+
+    // 绑定图片转换
+    const imgInput = document.getElementById('imgInput')
+    const targetW = document.getElementById('targetW')
+    const targetH = document.getElementById('targetH')
+    const keepAspect = document.getElementById('keepAspect')
+    const paletteSel = document.getElementById('paletteSel')
+    const convertBtn = document.getElementById('convertBtn')
+
+    convertBtn.addEventListener('click', async () => {
+      const file = imgInput.files && imgInput.files[0]
+      if (!file) {
+        alert('请先选择一张图片')
+        return
+      }
+      const tw = parseInt(targetW.value || '32', 10)
+      const th = parseInt(targetH.value || '32', 10)
+      const keep = !!keepAspect.checked
+
+      // 动态获取 core 色卡
+      const core = await import('@magic-beans/core')
+      const paletteColors = paletteSel.value === 'mard'
+        ? core.MagicBeans.createMardPalette().getColors()
+        : core.MagicBeans.createCocoPalette().getColors()
+
+      // 转换并渲染
+      try {
+        await chart.convertFromImage(file, {
+          targetWidth: tw,
+          targetHeight: th,
+          palette: paletteColors,
+          maintainAspectRatio: keep,
+          backgroundColor: { r: 255, g: 255, b: 255 },
+        })
+        chart.setShowColorCodes(true)
+        chart.setColorCodeLabelOptions({ codeLabelColor: '#222', codeLabelAutoContrast: true, codeLabelMinSize: 10, codeLabelFont: '14px system-ui' })
+        // 适当增大像素尺寸，便于观察色号
+        chart.setBeadSize(20)
+      } catch (e) {
+        console.error(e)
+        alert('转换失败：' + (e && e.message ? e.message : '未知错误'))
+      }
+    })
+  </script>
+</body>
+
+</html>

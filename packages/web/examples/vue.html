@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BeadsChartVue 全配置示例</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+      .panel label { margin-right: 12px; }
+      .panel input, .panel select { margin-left: 4px; }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "https://unpkg.com/vue@3/dist/vue.esm-browser.js"
+        }
+      }
+    </script>
+    <!-- 加载 PixiJS UMD 以提供 globalThis.PIXI，供 PixiRenderer 使用 -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+  </head>
+  <body>
+    <h1>Vue 组件版 BeadsChart（完整配置预览）</h1>
+    <div id="app"></div>
+    <script type="module">
+      import { createApp, ref, computed } from 'vue'
+      import { BeadsChartVue } from '../dist/index3.js'
+
+      const App = {
+        components: { BeadsChartVue },
+        setup() {
+          const width = ref(16)
+          const height = ref(16)
+          const beadSize = ref(24)
+
+          const showColorCodes = ref(true)
+          const codeLabelOptions = ref({ codeLabelColor: '#222', codeLabelAutoContrast: true, codeLabelMinSize: 12, codeLabelFont: '14px system-ui' })
+          const segmentation = ref({ blockWidth: 4, blockHeight: 4, showLabels: true, lineColor: '#999', lineWidth: 1, labelColor: '#666' })
+          const interaction = ref({ hoverHighlight: true, hoverStroke: '#333', hoverAlpha: 0.7, selectStroke: '#1f78b4', selectAlpha: 0.9, enableClickSelect: true })
+          const zoom = ref({ enabled: true, min: 0.5, max: 3, factor: 1.2 })
+          const pan = ref({ enabled: true })
+          const editEnabled = ref(true)
+          const editTool = ref('paint')
+          const brushBead = ref({ name: 'A', rgb: { r: 220, g: 220, b: 220 } })
+
+          const beadData = computed(() => Array.from({ length: width.value * height.value }, (_, i) => {
+            const x = i % width.value
+            const y = Math.floor(i / width.value)
+            const c = (x + y) % 2 === 0 ? { r: 240, g: 200, b: 200 } : { r: 180, g: 220, b: 240 }
+            return { id: i, x, y, color: c, name: (x + y) % 2 === 0 ? 'R' : 'B' }
+          }))
+
+          const onHover = (e) => console.log('hover', e)
+          const onClick = (e) => console.log('click', e)
+          const onSelectionChange = (e) => console.log('selection-change', e)
+          const onEditChange = (e) => console.log('edit-change', e)
+
+          return { width, height, beadSize, beadData, showColorCodes, codeLabelOptions, segmentation, interaction, zoom, pan, editEnabled, editTool, brushBead, onHover, onClick, onSelectionChange, onEditChange }
+        },
+        template: `
+          <div style="background:#fff;color:#111">
+            <div class="panel" style="margin-bottom:12px;">
+              <label><input type="checkbox" v-model="showColorCodes"> 显示色号</label>
+              <label><input type="checkbox" v-model="zoom.enabled"> 启用缩放</label>
+              <label><input type="checkbox" v-model="pan.enabled"> 启用平移</label>
+              <label><input type="checkbox" v-model="editEnabled"> 启用编辑</label>
+              <label> 工具：
+                <select v-model="editTool">
+                  <option value="paint">画笔</option>
+                  <option value="flood">洪泛填充</option>
+                </select>
+              </label>
+              <button style="margin-left:12px;" @click="brushBead={ name: 'A', rgb: { r: 220, g: 220, b: 220 } }">画笔 A</button>
+              <button style="margin-left:6px;" @click="brushBead={ name: 'B', rgb: { r: 180, g: 180, b: 240 } }">画笔 B</button>
+              <label style="margin-left:12px;"> 分割线：
+                <input type="number" v-model.number="segmentation.blockWidth" min="1" style="width:60px">W
+                <input type="number" v-model.number="segmentation.blockHeight" min="1" style="width:60px">H
+                <input type="checkbox" v-model="segmentation.showLabels"> 显示标签
+              </label>
+            </div>
+            <BeadsChartVue
+              :dimensions="{ width, height }"
+              :beadData="beadData"
+              :showColorCodes="showColorCodes"
+              :codeLabelOptions="codeLabelOptions"
+              :segmentation="segmentation"
+              :interaction="interaction"
+              :zoom="zoom"
+              :pan="pan"
+              :editEnabled="editEnabled"
+              :editTool="editTool"
+              :brushBead="brushBead"
+              @hover="onHover"
+              @click="onClick"
+              @selection-change="onSelectionChange"
+              @edit-change="onEditChange"
+            />
+          </div>
+        `,
+      }
+
+      createApp(App).mount('#app')
+    </script>
+  </body>
+</html>

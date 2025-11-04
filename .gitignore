@@ -45,4 +45,4 @@ tmp/
 temp/
 
 # Output files
-examples/output/
+**/output/
